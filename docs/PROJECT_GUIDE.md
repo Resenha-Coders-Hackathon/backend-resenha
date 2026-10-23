@@ -59,6 +59,7 @@ core/                    # users, auth and everything shared
   views/                 # HTTP layer
   permissions/           # DRF permission classes
   utils/                 # small stateless helpers (cookies, e-mail sender)
+  urls.py                # account endpoints and domain includes
   authenticate.py        # CustomAuthentication (JWT cookie + session check)
   response_messages.py   # every user-facing message (MSG_*)
   spectacular_serializers.py  # response schemas used only by the API docs
@@ -104,18 +105,22 @@ admin in `core/admin.py`, and include its urls in `app/urls.py`. See `core/modul
 
 ## 4. Authentication (how it works)
 
-- **Login** (`POST /api/v1/login/`) sets two HttpOnly cookies: `access_token`
+- **CSRF initialization**: call `GET /api/v1/csrf/` before either login method.
+- **Login** (`POST /api/v1/login/`) requires `X-CSRFToken` and sets two HttpOnly cookies: `access_token`
   (30 min) and `refresh_token` (1 day), plus the `csrftoken` cookie.
 - Every login creates/updates a **`UserSession`** row (device, IP, JTIs).
   `CustomAuthentication` accepts a token **only if its session is active**, so
   logout / revoking a session invalidates it immediately, not only at expiry.
 - **Refresh** (`POST /api/v1/refresh/`) rotates both tokens and blacklists the old
-  refresh token.
+  refresh token; requires `X-CSRFToken` even without an access cookie.
 - **CSRF**: cookie-authenticated writes (`POST/PUT/PATCH/DELETE`) must send the
   `X-CSRFToken` header with the `csrftoken` cookie value.
 - Public views set `authentication_classes = []` and `permission_classes = [AllowAny]`.
-  On those, DRF answers failed auth with **403**, not 401.
+  Login authentication failures return **403**; the token-refresh view returns **401**.
+  CSRF failures return **403** in both flows.
 - Frontend must send requests with credentials (`fetch(..., {credentials: "include"})`).
+
+See [`ROUTE_SECURITY.md`](ROUTE_SECURITY.md) for the route access policy and client contract.
 
 ### Session endpoints
 

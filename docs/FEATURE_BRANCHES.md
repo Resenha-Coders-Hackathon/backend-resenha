@@ -542,7 +542,7 @@ Put the code that uses them in a service (e.g. `core/services/report.py`).
 
 ### `feat/idempotency`
 
-**What it does:** protects write requests against duplicates (double click on
+**What it does:** protects authenticated payment creation against duplicates (double click on
 "pay", retry after a timeout). Requests **without** the header are untouched.
 
 ```js
@@ -559,11 +559,13 @@ await fetch("/api/v1/payments/", {
 - Same key + same user + same method/path within **24h** → the first response is
   replayed (header `Idempotent-Replayed: true`); the action does not run again.
 - Same key while the first request is still running → **409**.
-- 5xx responses are not stored, so the client can retry.
-- Don't send the header on login: replayed responses do not carry cookies.
+- Only successful responses are stored; failures can be retried.
+- Changed request bodies under the same key return **409**.
+- Authentication, CSRF and throttling run before every replay.
+- The header has no caching effect outside payment creation.
 
 **Note:** with more than one server process, use Redis (`feat/redis-celery`).
-**Files:** `core/middleware/idempotency.py`, `core/tests/test_idempotency.py`
+**Files:** `core/utils/idempotency.py`, `core/tests/test_idempotency.py`
 **Env vars:** none
 
 ---

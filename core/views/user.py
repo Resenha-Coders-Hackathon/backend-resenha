@@ -1,5 +1,4 @@
-# import uuid
-
+from django.db import transaction
 from django.middleware import csrf
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -13,6 +12,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from core.authenticate import enforce_csrf
 from core.models.user import User, UserSession
 from core.response_messages import (
     MSG_CANNOT_DEACTIVATE_CURRENT_SESSION,
@@ -55,17 +55,20 @@ from core.utils.cookies import (
     set_auth_cookies,
 )
 
-# TODO: add description and summary to all of views
 
-# TODO: adicionar responses aos novos endpoints de resfresh e arrumar MSG_... deles nos erros (estão em português e sem gettext_lazy)
+@extend_schema(tags=["Conta e Sessões"])
+class CSRFTokenView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
-
-def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
-    return {
-        "refresh": str(refresh),
-        "access": str(refresh.access_token),
-    }
+    @extend_schema(
+        summary="Initialize the CSRF cookie before login", responses={204: None}
+    )
+    def get(self, request):
+        csrf.get_token(request)
+        return Response(
+            status=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "no-store"}
+        )
 
 
 @extend_schema(tags=["Conta e Sessões"])
@@ -76,7 +79,7 @@ class LoginView(APIView):
 
     @extend_schema(
         summary="Authenticate user and set JWT tokens in the browser cookies",
-        description="When a user makes a request, the default authentication class defined in the DRF settings is not applied; that is, anyone can perform the operation. When the login is successful, JWT cookies are set in the browser. Considering different cases:\n\nA - User is not yet logged in (no cookies in the browser):\nThe operation proceeds, verifying the credentials (responses below) and setting the cookies.\n\nB - The user is already logged in (already has cookies in the browser):\nThe operation also proceeds normally too, however, the access and refresh cookies set in the previous login are invalidated within the blacklist.",
+        description="Initialize the CSRF cookie with GET /api/v1/csrf/ and send X-CSRFToken. Successful login sets HttpOnly JWT cookies, rotates the CSRF cookie and records the active session.",
         request=LoginSerializer,
         responses={
             200: LoginSucessfulSerializer,
@@ -84,6 +87,7 @@ class LoginView(APIView):
         },
     )
     def post(self, request):
+        enforce_csrf(request)
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -94,11 +98,9 @@ class LoginView(APIView):
             ip_address=request.META.get("REMOTE_ADDR"),
         )
 
-        response = Response(
-            {"detail": MSG_LOGIN_SUCCESSFUL, "data": token_data}, status.HTTP_200_OK
-        )
+        response = Response({"detail": MSG_LOGIN_SUCCESSFUL}, status.HTTP_200_OK)
         set_auth_cookies(response, token_data)
-        csrf.get_token(request)
+        csrf.rotate_token(request)
 
         return response
 
@@ -107,16 +109,19 @@ class LoginView(APIView):
 class CustomTokenRefreshView(TokenRefreshView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = "auth"
 
     @extend_schema(
-        summary="Refresh the user session using refresh token setted in the user browser",
-        request=LoginSerializer,
+        summary="Rotate the active session's JWT cookies using its refresh cookie and CSRF header",
+        request=None,
         responses={
             200: RefreshTokensSuccessfulSerializer,
             401: InvalidOrExpiredRefreshTokenSerializer,
         },
     )
+    @transaction.atomic
     def post(self, request, *args, **kwargs):
+        enforce_csrf(request)
         refresh_token_str = request.COOKIES.get("refresh_token")
         if not refresh_token_str:
             raise AuthenticationFailed(MSG_NO_REFRESH_TOKEN_PROVIDED)
@@ -125,12 +130,18 @@ class CustomTokenRefreshView(TokenRefreshView):
             old_jti = str(old_refresh_token.get("jti", ""))
         except TokenError:
             raise InvalidToken(MSG_INVALID_OR_EXPIRED_REFRESH_TOKEN)
-        session_is_active = UserSession.objects.filter(
-            refresh_jti=old_jti,
-            is_active=True,
-        ).exists()
+        session = (
+            UserSession.objects.select_for_update()
+            .filter(
+                refresh_jti=old_jti,
+                user_id=old_refresh_token["user_id"],
+                user__is_active=True,
+                is_active=True,
+            )
+            .first()
+        )
 
-        if not session_is_active:
+        if session is None:
             raise AuthenticationFailed(MSG_SESSION_REVOKED_OR_INACTIVE)
         data = (
             request.data.copy() if hasattr(request.data, "copy") else dict(request.data)

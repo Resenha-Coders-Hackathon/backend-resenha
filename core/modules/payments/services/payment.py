@@ -155,10 +155,17 @@ class PaymentService:
     @staticmethod
     def sync_from_provider(provider_payment_id: str) -> None:
         """Trust only the payment state returned by Mercado Pago, not webhook data."""
+        payment = Payment.objects.filter(
+            provider_payment_id=provider_payment_id
+        ).first()
+        if payment is None:
+            return
         result = _sdk().payment().get(provider_payment_id)
         if result["status"] != 200:
             return
         data = result["response"]
-        Payment.objects.filter(id=data.get("external_reference")).update(
-            status=data["status"], provider_payment_id=str(data["id"])
-        )
+        if str(data.get("id")) != provider_payment_id or data.get(
+            "external_reference"
+        ) != str(payment.pk):
+            return
+        Payment.objects.filter(pk=payment.pk).update(status=data["status"])

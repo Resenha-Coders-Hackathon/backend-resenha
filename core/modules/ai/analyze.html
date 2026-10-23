@@ -50,7 +50,7 @@
         const response = await fetch("/api/v1/login/", {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-CSRFToken": document.cookie.split(";").find((part) => part.trim().startsWith("csrftoken="))?.trim().slice("csrftoken=".length) || "" },
           body: JSON.stringify({
             email: document.getElementById("email").value.trim(),
             password: document.getElementById("password").value,

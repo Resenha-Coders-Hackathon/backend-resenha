@@ -12,15 +12,15 @@ from core.modules.payments.serializers.payment import (
     PaymentCardCreateSerializer,
     PaymentPixCreateSerializer,
     PaymentSerializer,
+    PaymentWebhookSerializer,
     PixPaymentResponseSerializer,
 )
 from core.modules.payments.services.payment import PaymentService
+from core.utils.idempotency import idempotent_payment
 
 
 @extend_schema(tags=["Pagamentos"])
 class PaymentPixListCreateView(ListAPIView):
-
-
     permission_classes = [IsAuthenticated]
     serializer_class = PaymentSerializer
 
@@ -37,6 +37,7 @@ class PaymentPixListCreateView(ListAPIView):
         request=PaymentPixCreateSerializer,
         responses={201: PixPaymentResponseSerializer},
     )
+    @idempotent_payment
     def post(self, request):
         serializer = PaymentPixCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -61,6 +62,7 @@ class PaymentCardCreateView(APIView):
         request=PaymentCardCreateSerializer,
         responses={201: CardPaymentResponseSerializer},
     )
+    @idempotent_payment
     def post(self, request):
         serializer = PaymentCardCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -83,10 +85,17 @@ class PaymentWebhookView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
-    @extend_schema(summary="Mercado Pago webhook", request=None, responses={200: None})
+    @extend_schema(
+        summary="Mercado Pago webhook",
+        request=PaymentWebhookSerializer,
+        responses={200: None},
+    )
     def post(self, request):
-        topic = request.data.get("type") or request.query_params.get("type")
-        provider_payment_id = request.data.get("data", {}).get(
+        serializer = PaymentWebhookSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        topic = data.get("type") or request.query_params.get("type")
+        provider_payment_id = data.get("data", {}).get(
             "id"
         ) or request.query_params.get("data.id")
         if topic == "payment" and provider_payment_id:

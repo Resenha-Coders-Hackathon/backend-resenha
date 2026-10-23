@@ -6,6 +6,15 @@ from rest_framework import serializers
 from core.modules.payments.models.payment import Payment
 
 
+class PaymentWebhookDataSerializer(serializers.Serializer):
+    id = serializers.CharField(max_length=255, required=False)
+
+
+class PaymentWebhookSerializer(serializers.Serializer):
+    type = serializers.CharField(max_length=50, required=False)
+    data = PaymentWebhookDataSerializer(required=False)
+
+
 class FixedAmountPaymentSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255)
 

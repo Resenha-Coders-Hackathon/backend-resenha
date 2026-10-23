@@ -193,6 +193,52 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Payment.objects.exists())
 
+    def test_webhook_for_unknown_payment_does_not_call_provider(self):
+        response = self.client.post(
+            "/api/v1/payments/webhook/",
+            {"type": "payment", "data": {"id": "unknown"}},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.sdk.payment().get.assert_not_called()
+
+    def test_webhook_validates_payload_shape(self):
+        response = self.client.post(
+            "/api/v1/payments/webhook/",
+            {"type": "payment", "data": []},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.sdk.payment().get.assert_not_called()
+
+    def test_webhook_cannot_update_another_local_payment(self):
+        payment = Payment.objects.create(
+            user=User.objects.get(),
+            title="One",
+            amount="9.99",
+            provider_payment_id="99",
+        )
+        other = Payment.objects.create(
+            user=payment.user, title="Two", amount="9.99", provider_payment_id="100"
+        )
+        self.sdk.payment().get.return_value = {
+            "status": 200,
+            "response": {
+                "id": 99,
+                "status": "approved",
+                "external_reference": str(other.id),
+            },
+        }
+        self.client.post(
+            "/api/v1/payments/webhook/",
+            {"type": "payment", "data": {"id": "99"}},
+            content_type="application/json",
+        )
+        payment.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertEqual(other.status, Payment.Status.PENDING)
+
     def test_provider_failure_does_not_leave_payment(self):
         self.sdk.payment().create.return_value = {"status": 400, "response": {}}
         response = self.client.post(

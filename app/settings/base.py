@@ -21,6 +21,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8000",
     "https://3009.michalski.app",
+    "https://4000.michalski.app",
+    *filter(None, os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")),
 ]
 # frontends allowed to call the API; credentials so the auth cookies are sent
 CORS_ALLOWED_ORIGINS = CSRF_TRUSTED_ORIGINS
@@ -29,7 +31,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_NAME = "csrftoken"
-SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = False  # TODO: ALTERNAR TRUE EM PRODUÇÃO
@@ -83,7 +85,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "core.middleware.idempotency.IdempotencyMiddleware",
     "core.middleware.audit.AuditlogMiddleware",
 ]
 ROOT_URLCONF = "app.urls"
@@ -151,6 +152,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "core.authenticate.CustomAuthentication",
     ],

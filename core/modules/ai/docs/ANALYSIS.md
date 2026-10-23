@@ -21,8 +21,8 @@ the multipart `Content-Type` and boundary.
 
 ## Browser tester
 
-With Django running, open `http://localhost:8000/api/v1/ai/test/`, enter your
-account email and password, and click **Log in**. Then select files and click
+With Django running in development, log in with a staff account in the application,
+then open `http://localhost:8000/api/v1/ai/test/`. Select files and click
 **Send files**. The page displays the HTTP status and response body,
 or a download link if the response is a PDF. No separate server is needed.
 Login uses `/api/v1/login/` and browser session cookies, without redirects.
@@ -44,8 +44,8 @@ PDF generation. No document instructions are executed, and model text is escaped
 before rendering. Input files and analysis results are held only for the request;
 this endpoint does not publish files to Cloudinary or create database records.
 Django may spool uploads to temporary disk according to its existing handlers.
-The existing idempotency middleware may cache the PDF response when an
-`Idempotency-Key` header is supplied.
+Payment idempotency does not cache AI reports, even if an `Idempotency-Key`
+header is supplied.
 
 If any file fails, processing stops and **no partial PDF is returned**. Analysis
 errors include the file name, its one-based index, a reason, and a clear detail.

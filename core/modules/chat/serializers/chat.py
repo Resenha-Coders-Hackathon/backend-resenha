@@ -65,8 +65,14 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_task(self, message) -> dict | None:
+        from core.modules.chat.services.chat import ChatService
+
         task = message.task
-        if task is None or message.deleted_at:
+        if (
+            task is None
+            or message.deleted_at
+            or not ChatService.task_visible_to_channel(task, message.channel)
+        ):
             return None
         return {
             "id": str(task.id),

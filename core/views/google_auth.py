@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.authenticate import enforce_csrf
 from core.response_messages import MSG_LOGIN_SUCCESSFUL
 from core.serializers.google_auth import GoogleLoginSerializer
 from core.services.google_auth import GoogleAuthService
@@ -19,6 +20,7 @@ from core.utils.cookies import set_auth_cookies
 class GoogleLoginView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = "auth"
 
     @extend_schema(
         summary="Log in or sign up with Google",
@@ -30,6 +32,7 @@ class GoogleLoginView(APIView):
         },
     )
     def post(self, request):
+        enforce_csrf(request)
         serializer = GoogleLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -41,5 +44,5 @@ class GoogleLoginView(APIView):
 
         response = Response({"detail": MSG_LOGIN_SUCCESSFUL}, status.HTTP_200_OK)
         set_auth_cookies(response, tokens)
-        csrf.get_token(request)
+        csrf.rotate_token(request)
         return response

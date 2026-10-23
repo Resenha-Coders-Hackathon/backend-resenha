@@ -151,6 +151,29 @@ class MentionAndTaskTests(ChatTestCase):
         self.assertEqual(res.status_code, 400)
         self.assertEqual(ChatMessage.objects.count(), 0)
 
+    def test_private_task_cannot_be_exposed_to_general_channel(self):
+        sector = SectorService.create(self.owner, self.org.id, name="Private")
+        SectorMember.objects.create(sector=sector, user=self.ana, role="editor")
+        task = TaskService.create(self.owner, sector.id, {"title": "Private budget"})
+        response = self.say(self.ana, self.general_id, "see", task=str(task.id))
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(ChatMessage.objects.exists())
+
+    def test_task_card_is_hidden_after_sector_becomes_private(self):
+        sector = SectorService.create(
+            self.owner, self.org.id, name="Public", is_private=False
+        )
+        task = TaskService.create(self.owner, sector.id, {"title": "Budget"})
+        self.assertEqual(
+            self.say(self.owner, self.general_id, "see", task=str(task.id)).status_code,
+            201,
+        )
+        SectorService.update(self.owner, sector.id, {"is_private": True})
+        response = self.clients[self.bob].get(
+            f"{API}chat/channels/{self.general_id}/messages/"
+        )
+        self.assertIsNone(response.json()["results"][0]["task"])
+
 
 class AttachmentTests(ChatTestCase):
     def setUp(self):

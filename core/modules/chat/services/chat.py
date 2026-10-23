@@ -168,6 +168,8 @@ class ChatService:
 
     @staticmethod
     def can_access(user: User, channel: ChatChannel) -> bool:
+        if not channel.organization.is_active:
+            return False
         if not OrganizationMember.objects.filter(
             organization_id=channel.organization_id, user=user
         ).exists():
@@ -247,7 +249,7 @@ class ChatService:
             ).first()
             if reply_to is None:
                 raise ValidationError(MSG_CHAT_REPLY_INVALID)
-        task = ChatService._citable_task(user, task_id)
+        task = ChatService._citable_task(user, channel, task_id)
         mentioned = ChatService._mentionable(user, channel, mention_ids)
         AttachmentService.validate(files)
         stored = AttachmentService.upload_all(
@@ -314,14 +316,30 @@ class ChatService:
     # helpers ------------------------------------------------------------
 
     @staticmethod
-    def _citable_task(user: User, task_id):
+    def _citable_task(user: User, channel: ChatChannel, task_id):
         if not task_id:
             return None
         try:
             task, _sector, _role = TaskService.get_task(user, task_id)
         except NotFound, PermissionDenied:
             raise ValidationError(MSG_CHAT_TASK_INVALID)
+        if not ChatService.task_visible_to_channel(task, channel):
+            raise ValidationError(MSG_CHAT_TASK_INVALID)
         return task
+
+    @staticmethod
+    def task_visible_to_channel(task, channel: ChatChannel) -> bool:
+        sector = task.sector
+        if (
+            not task.is_active
+            or not sector.is_active
+            or not channel.organization.is_active
+            or sector.organization_id != channel.organization_id
+        ):
+            return False
+        return set(ChatService._recipients(channel)) <= SectorService.participant_ids(
+            sector
+        )
 
     @staticmethod
     def _mentionable(user: User, channel: ChatChannel, mention_ids) -> list[User]:
@@ -451,7 +469,15 @@ class ChatService:
             )
         else:
             members = ChatChannelMember.objects.filter(channel=channel)
-        return list(set(members.values_list("user_id", flat=True)))
+        member_ids = members.values_list("user_id", flat=True)
+        return list(
+            OrganizationMember.objects.filter(
+                organization_id=channel.organization_id,
+                organization__is_active=True,
+                user_id__in=member_ids,
+                user__is_active=True,
+            ).values_list("user_id", flat=True)
+        )
 
     @staticmethod
     def _broadcast(channel: ChatChannel, event: str, message: ChatMessage) -> None:

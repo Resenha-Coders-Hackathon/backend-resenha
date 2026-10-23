@@ -2,6 +2,11 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.layers import get_channel_layer
+from django.core.exceptions import ValidationError
+from rest_framework.exceptions import NotFound
+
+from core.utils.cookies import get_auth_cookie_name
+from core.websockets.auth import get_user_from_token
 
 
 def user_group(user_id) -> str:
@@ -37,6 +42,10 @@ class UserConsumer(AsyncJsonWebsocketConsumer):
 
     async def receive_json(self, content, **kwargs):
         """Client -> server: {"type": "chat.typing", "channel_id": "<uuid>"}"""
+        if not await self._session_active():
+            return
+        if not isinstance(content, dict):
+            return
         if content.get("type") == "chat.typing":
             await self._relay_typing(content.get("channel_id"))
 
@@ -68,4 +77,25 @@ class UserConsumer(AsyncJsonWebsocketConsumer):
         return presence
 
     async def push(self, event):
+        if not await self._session_active():
+            return
+        payload = event["payload"]
+        if payload.get("type", "").startswith("chat."):
+            from core.modules.chat.services.chat import ChatService
+
+            try:
+                await database_sync_to_async(ChatService.get_channel)(
+                    self.scope["user"], payload.get("channel_id")
+                )
+            except NotFound, ValidationError:
+                return
         await self.send_json(event["payload"])
+
+    async def _session_active(self):
+        raw_token = self.scope.get("cookies", {}).get(get_auth_cookie_name())
+        user = await get_user_from_token(raw_token) if raw_token else None
+        if user is None or not user.is_authenticated:
+            await self.close(code=4401)
+            return False
+        self.scope["user"] = user
+        return True

@@ -5,9 +5,6 @@ from .base import *  # noqa: F403
 DEBUG = False
 SECRET_KEY = os.environ["SECRET_KEY"]  # fail fast if missing
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
-CSRF_TRUSTED_ORIGINS += [  # noqa: F405
-    origin for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin
-]
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",

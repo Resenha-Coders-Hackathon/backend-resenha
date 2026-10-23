@@ -57,6 +57,24 @@ class ChatRealtimeTests(TransactionTestCase):
         self.assertEqual(event["message"]["author_name"], "Ana")
         await ws.disconnect()
 
+    async def test_open_socket_drops_chat_event_after_membership_removal(self):
+        from core.websockets.consumers import send_to_user
+
+        cookie = await sync_to_async(self.login)("bob@a.com")
+        ws = WebsocketCommunicator(
+            application,
+            "/ws/",
+            headers=[(b"cookie", f"{get_auth_cookie_name()}={cookie}".encode())],
+        )
+        self.assertTrue((await ws.connect())[0])
+        await sync_to_async(OrganizationMember.objects.filter(user=self.bob).delete)()
+        await sync_to_async(send_to_user)(
+            self.bob.pk,
+            {"type": "chat.message", "channel_id": str(self.general)},
+        )
+        self.assertTrue(await ws.receive_nothing(timeout=0.5))
+        await ws.disconnect()
+
 
 class ChatTypingAndPresenceTests(TransactionTestCase):
     def setUp(self):
