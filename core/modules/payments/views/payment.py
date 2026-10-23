@@ -15,6 +15,7 @@ from core.modules.payments.serializers.payment import (
 from core.modules.payments.services.payment import PaymentService
 
 
+@extend_schema(tags=["Pagamentos"])
 class PaymentListCreateView(ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PaymentSerializer
@@ -47,6 +48,7 @@ class PaymentListCreateView(ListAPIView):
         return Response(result, status.HTTP_201_CREATED)
 
 
+@extend_schema(tags=["Pagamentos"])
 class PaymentWebhookView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
