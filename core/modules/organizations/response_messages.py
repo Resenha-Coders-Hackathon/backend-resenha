@@ -9,3 +9,4 @@ MSG_ORGANIZATION_OWNER_PROTECTED = _(
 )
 MSG_ORGANIZATION_USER_NOT_FOUND = _("No active user with this e-mail.")
 MSG_ORGANIZATION_ALREADY_MEMBER = _("This user is already a member.")
+MSG_ORGANIZATION_LOCATION_INVALID = _("Provide a valid latitude and longitude.")

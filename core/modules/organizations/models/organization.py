@@ -38,6 +38,7 @@ class Organization(BaseModel):
     name = models.CharField(_("name"), max_length=255)
     description = models.TextField(_("description"), blank=True)
     logo_url = models.URLField(_("logo url"), blank=True)
+    location = models.JSONField(_("location"), null=True, blank=True, default=None)
     is_personal = models.BooleanField(
         _("personal"),
         default=False,

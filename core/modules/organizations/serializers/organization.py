@@ -1,13 +1,31 @@
+from math import isfinite
+
 from rest_framework import serializers
 
 from core.modules.organizations.models.organization import (
     Organization,
     OrganizationMember,
 )
+from core.modules.organizations.response_messages import (
+    MSG_ORGANIZATION_LOCATION_INVALID,
+)
+
+
+class OrganizationLocationSerializer(serializers.Serializer):
+    latitude = serializers.FloatField(min_value=-90, max_value=90)
+    longitude = serializers.FloatField(min_value=-180, max_value=180)
+
+    def validate(self, data):
+        if not all(
+            key in data and isfinite(data[key]) for key in ("latitude", "longitude")
+        ):
+            raise serializers.ValidationError(MSG_ORGANIZATION_LOCATION_INVALID)
+        return data
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
     current_role = serializers.SerializerMethodField()
+    location = OrganizationLocationSerializer(required=False, allow_null=True)
 
     def get_current_role(self, organization) -> str | None:
         if hasattr(organization, "current_role"):
@@ -30,6 +48,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "team_size",
             "description",
             "logo_url",
+            "location",
             "is_personal",
             "current_role",
             "created_at",
