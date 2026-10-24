@@ -16,6 +16,36 @@ from core.modules.teams.services.team import TeamService
 
 
 class SectorTests(KanbanTestCase):
+    def test_team_role_update_is_scoped_validated_and_changes_effective_access(self):
+        sector_id = self.make_sector()
+        team = TeamService.create(self.owner, self.org.id, name="Role changes")
+        TeamService.add_member(
+            self.owner, self.org.id, team.id, self.member.id, "member"
+        )
+        link = self.client.post(
+            f"{API}sectors/{sector_id}/teams/",
+            {"team_id": str(team.id), "role": "viewer"},
+        ).json()
+        url = f"{API}sectors/{sector_id}/teams/{link['id']}/"
+        self.assertEqual(
+            self.member_client.patch(url, {"role": "manager"}).status_code, 403
+        )
+        self.assertEqual(self.client.patch(url, {"role": "owner"}).status_code, 400)
+        self.assertEqual(self.client.patch(url, {"role": "editor"}).status_code, 200)
+        self.assertEqual(
+            self.member_client.get(f"{API}sectors/{sector_id}/").json()["my_role"],
+            "editor",
+        )
+        other_sector = self.make_sector()
+        self.assertEqual(
+            self.client.patch(
+                f"{API}sectors/{other_sector}/teams/{link['id']}/", {"role": "manager"}
+            ).status_code,
+            404,
+        )
+        outsider = client_for(make_user("outsider-role@a.com"))
+        self.assertEqual(outsider.patch(url, {"role": "manager"}).status_code, 404)
+
     def test_create_adds_manager_and_default_columns(self):
         sector_id = self.make_sector()
         member = SectorMember.objects.get(sector_id=sector_id)

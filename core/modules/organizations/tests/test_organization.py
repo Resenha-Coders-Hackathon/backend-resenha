@@ -158,3 +158,61 @@ class OrganizationTests(TestCase):
 
     def test_anonymous_is_rejected(self):
         self.assertEqual(APIClient().get(URL).status_code, 401)
+
+    def test_settings_can_keep_the_current_slug_but_not_take_another(self):
+        org_id = self.create_org()
+        slug = Organization.objects.get(id=org_id).slug
+        response = self.client.patch(
+            f"{URL}{org_id}/", {"slug": slug, "name": "Updated"}
+        )
+        self.assertEqual(response.status_code, 200)
+        other_id = self.create_org("Other")
+        response = self.client.patch(f"{URL}{other_id}/", {"slug": slug})
+        self.assertEqual(response.status_code, 400)
+
+    def test_removal_clears_scoped_access_without_touching_other_organizations(self):
+        from core.modules.kanban.models.sector import SectorMember
+        from core.modules.kanban.services.sector import SectorService
+        from core.modules.organizations.services.organization import OrganizationService
+        from core.modules.teams.models.team import TeamMember
+        from core.modules.teams.services.team import TeamService
+
+        user = make_user("removed@a.com")
+        org_ids = [self.create_org("First"), self.create_org("Second")]
+        for org_id in org_ids:
+            OrganizationService.add_member(self.owner, org_id, user.email, "member")
+            team = TeamService.create(self.owner, org_id, name="Team")
+            TeamService.add_member(self.owner, org_id, team.id, user.id, "lead")
+            sector = SectorService.create(self.owner, org_id, name="Sector")
+            SectorService.add_member(self.owner, sector.id, user.id, "editor")
+        membership = OrganizationMember.objects.get(
+            organization_id=org_ids[0], user=user
+        )
+        response = self.client.delete(f"{URL}{org_ids[0]}/members/{membership.id}/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(
+            TeamMember.objects.filter(
+                user=user, team__organization_id=org_ids[0]
+            ).exists()
+        )
+        self.assertFalse(
+            SectorMember.objects.filter(
+                user=user, sector__organization_id=org_ids[0]
+            ).exists()
+        )
+        self.assertTrue(
+            TeamMember.objects.filter(
+                user=user, team__organization_id=org_ids[1]
+            ).exists()
+        )
+        self.assertTrue(
+            SectorMember.objects.filter(
+                user=user, sector__organization_id=org_ids[1]
+            ).exists()
+        )
+        OrganizationService.add_member(self.owner, org_ids[0], user.email, "member")
+        self.assertFalse(
+            TeamMember.objects.filter(
+                user=user, team__organization_id=org_ids[0]
+            ).exists()
+        )

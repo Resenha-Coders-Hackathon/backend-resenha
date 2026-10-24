@@ -63,7 +63,12 @@ class OrganizationDetailView(APIView):
         responses={200: OrganizationSerializer},
     )
     def patch(self, request, organization_id):
-        serializer = OrganizationSerializer(data=request.data, partial=True)
+        organization = OrganizationService.get_membership(
+            request.user, organization_id
+        ).organization
+        serializer = OrganizationSerializer(
+            organization, data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
         organization = OrganizationService.update(
             request.user, organization_id, serializer.validated_data

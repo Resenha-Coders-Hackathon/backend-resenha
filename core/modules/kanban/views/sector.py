@@ -171,6 +171,19 @@ class SectorTeamDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        summary="Change a linked team's sector role (manager)",
+        request=SectorMemberRoleSerializer,
+        responses={200: SectorTeamSerializer},
+    )
+    def patch(self, request, sector_id, link_id):
+        serializer = SectorMemberRoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        link = SectorService.change_team_role(
+            request.user, sector_id, link_id, serializer.validated_data["role"]
+        )
+        return Response(SectorTeamSerializer(link).data)
+
+    @extend_schema(
         summary="Unlink a team from the sector (manager)", responses={204: None}
     )
     def delete(self, request, sector_id, link_id):

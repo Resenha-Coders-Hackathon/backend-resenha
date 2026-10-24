@@ -212,6 +212,19 @@ class SectorService:
             raise ValidationError(MSG_SECTOR_TEAM_ALREADY_LINKED)
 
     @staticmethod
+    def change_team_role(user: User, sector_id, link_id, role: str) -> SectorTeam:
+        sector, _role = SectorService.get_sector(user, sector_id, Role.MANAGER)
+        try:
+            link = SectorTeam.objects.select_related("team").get(
+                sector=sector, id=link_id
+            )
+        except SectorTeam.DoesNotExist:
+            raise NotFound()
+        link.role = role
+        link.save(update_fields=["role"])
+        return link
+
+    @staticmethod
     def remove_team(user: User, sector_id, link_id) -> None:
         sector, _role = SectorService.get_sector(user, sector_id, Role.MANAGER)
         deleted, _ = SectorTeam.objects.filter(sector=sector, id=link_id).delete()

@@ -125,6 +125,7 @@ class OrganizationService:
         return member
 
     @staticmethod
+    @transaction.atomic
     def remove_member(user: User, organization_id, member_id) -> None:
         actor = OrganizationService.get_membership(user, organization_id)
         member = OrganizationService._get_member(organization_id, member_id)
@@ -133,6 +134,12 @@ class OrganizationService:
             OrganizationService._check_target(actor, member)
         elif member.role == Role.OWNER:
             raise PermissionDenied(MSG_ORGANIZATION_OWNER_PROTECTED)
+        member.user.team_memberships.filter(
+            team__organization_id=organization_id
+        ).delete()
+        member.user.sector_memberships.filter(
+            sector__organization_id=organization_id
+        ).delete()
         member.delete()
 
     @staticmethod
